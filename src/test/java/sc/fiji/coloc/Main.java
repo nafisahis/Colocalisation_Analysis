@@ -47,7 +47,8 @@ public class Main {
 		new ImageJ();
 
 		// open the FluorescentCells sample (to test single slice images)
-		ImagePlus fluorCellImage = IJ.openImage("http://imagej.net/images/FluorescentCells.zip");
+		//ImagePlus fluorCellImage = IJ.openImage("http://imagej.net/images/FluorescentCells.zip");
+		ImagePlus fluorCellImage = IJ.openImage("C:\\Users\\nafis\\Desktop\\EclipseWorkspace\\Colocalisation_Analysis\\src\\test\\resources\\FluorescentCells_enlarged.tif");
 		ImagePlus[] fluorCellchannels = ChannelSplitter.split(fluorCellImage);
 		fluorCellchannels[0].show();
 		fluorCellchannels[1].show();

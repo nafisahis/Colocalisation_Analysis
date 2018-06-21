@@ -578,9 +578,20 @@ public class SingleWindowDisplay<T extends RealType<T>> extends JFrame
 		boolean overlayModified = false;
 		Overlay overlay = new Overlay();
 
+		overlayModified = drawHistogramLine(img, overlay);
+
+		if (overlayModified) {
+			overlay.setStrokeColor(java.awt.Color.WHITE);
+			imp.setOverlay(overlay);
+		}
+
+		imagePanel.repaint();
+	}
+	public boolean drawHistogramLine(RandomAccessibleInterval<? extends RealType<?>> img, Overlay overlay) {
+		
 		// if it is the 2d histogram, we want to show the regression line
 		if (isHistogram(img)) {
-			Histogram2D<T> histogram = mapOf2DHistograms.get(img);
+			Histogram2D<T> histogram = mapOf2DHistograms.get(img); // line is already returned from the image
 			/*
 			 * check if we should draw a regression line for the current
 			 * histogram.
@@ -591,20 +602,15 @@ public class SingleWindowDisplay<T extends RealType<T>> extends JFrame
 					if (img == histogram.getPlotImage()) {
 						drawLine(overlay, img, autoThreshold.getAutoThresholdSlope(),
 								autoThreshold.getAutoThresholdIntercept());
-						overlayModified = true;
+						//overlayModified = true;
+						return true;
 					}
 				}
 			}
 		}
-
-		if (overlayModified) {
-			overlay.setStrokeColor(java.awt.Color.WHITE);
-			imp.setOverlay(overlay);
-		}
-
-		imagePanel.repaint();
+		return false;
 	}
-
+	
 	/**
 	 * Tests whether the given image is a histogram or not.
 	 * 

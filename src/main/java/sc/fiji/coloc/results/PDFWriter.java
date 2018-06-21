@@ -31,22 +31,27 @@ import com.itextpdf.text.pdf.PdfWriter;
 
 import ij.IJ;
 import ij.ImagePlus;
+import ij.gui.Line;
+import ij.gui.Overlay;
 import ij.io.SaveDialog;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.math.ImageStatistics;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.LongType;
-
+import sc.fiji.coloc.algorithms.AutoThresholdRegression;
 import sc.fiji.coloc.algorithms.Histogram2D;
 import sc.fiji.coloc.gadgets.DataContainer;
 import sc.fiji.coloc.gadgets.DataContainer.MaskType;
+import sc.fiji.coloc.results.SingleWindowDisplay;
 
 
 public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
@@ -73,6 +78,7 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 		= new ArrayList<Paragraph>();
 	// a list of PDF warnings
 	protected List<Paragraph> PDFwarnings = new ArrayList<Paragraph>();
+	protected Map<RandomAccessibleInterval<LongType>, Histogram2D<T>> mapOf2DHistograms = new HashMap<RandomAccessibleInterval<LongType>, Histogram2D<T>>();
 
 	/**
 	 * Creates a new PDFWriter that can access the container.
@@ -85,12 +91,86 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 
 	@Override
 	public void handleImage(RandomAccessibleInterval<T> image, String name) {
+		
+		
+		
 		ImagePlus imp = ImageJFunctions.wrapFloat( image, name );
-
+		System.out.println("here");
+				
 		// set the display range
 		double max = ImageStatistics.getImageMax(image).getRealDouble();
 		imp.setDisplayRange(0.0, max);
 		addImageToList(imp, name);
+	}
+	protected boolean isHistogram(RandomAccessibleInterval<? extends RealType<?>> img) {
+		return mapOf2DHistograms.containsKey(img);
+	}
+	protected void drawLine(Overlay overlay, RandomAccessibleInterval<? extends RealType<?>> img, double slope,
+			double intercept) {
+		double startX, startY, endX, endY;
+		long imgWidth = img.dimension(0);
+		long imgHeight = img.dimension(1);
+		/*
+		 * since we want to draw the line over the whole image we can directly
+		 * use screen coordinates for x values.
+		 */
+		startX = 0.0;
+		endX = imgWidth;
+
+		// check if we can get some exta information for drawing
+		if (isHistogram(img)) {
+			Histogram2D<T> histogram = mapOf2DHistograms.get(img);
+			// get calibrated start y coordinates
+			double calibratedStartY = slope * histogram.getXMin() + intercept;
+			double calibratedEndY = slope * histogram.getXMax() + intercept;
+			// convert calibrated coordinates to screen coordinates
+			startY = calibratedStartY * histogram.getYBinWidth();
+			endY = calibratedEndY * histogram.getYBinWidth();
+		} else {
+			startY = slope * startX + intercept;
+			endY = slope * endX + intercept;
+		}
+
+		/*
+		 * since the screen origin is in the top left of the image, we need to
+		 * x-mirror our line
+		 */
+		startY = (imgHeight - 1) - startY;
+		endY = (imgHeight - 1) - endY;
+		// create the line ROI and add it to the overlay
+		Line lineROI = new Line(startX, startY, endX, endY);
+		/*
+		 * Set drawing width of line to one, in case it has been changed
+		 * globally.
+		 */
+		lineROI.setStrokeWidth(1.0f);
+		overlay.add(lineROI);
+	}
+	private boolean drawHistogramLine(RandomAccessibleInterval<LongType> image, Overlay overlay) {
+		// TODO Auto-generated method stub
+		// if it is the 2d histogram, we want to show the regression line
+		System.out.println(true);
+				if (isHistogram(image)) {
+					
+					Histogram2D<T> histogram = mapOf2DHistograms.get(image); // line is already returned from the image
+					/*
+					 * check if we should draw a regression line for the current
+					 * histogram.
+					 */
+					if (histogram.getDrawingSettings().contains(Histogram2D.DrawingFlags.RegressionLine)) {
+						AutoThresholdRegression<T> autoThreshold = this.container.getAutoThreshold();
+						if (histogram != null && autoThreshold != null) {
+							if (image == histogram.getPlotImage()) {
+								drawLine(overlay, image, autoThreshold.getAutoThresholdSlope(),
+										autoThreshold.getAutoThresholdIntercept());
+								
+								return true;
+								
+							}
+						}
+					}
+				}
+				return false;
 	}
 
 	/**
@@ -102,15 +182,26 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 	public void handleHistogram(Histogram2D<T> histogram, String name) {
 		RandomAccessibleInterval<LongType> image = histogram.getPlotImage();
 		ImagePlus imp = ImageJFunctions.wrapFloat( image, name );
+		
 		// make a snapshot to be able to reset after modifications
 		imp.getProcessor().snapshot();
 		imp.getProcessor().log();
 		imp.updateAndDraw();
 		imp.getProcessor().resetMinAndMax();
 		IJ.run(imp,"Fire", null);
+		boolean overlayModified = false;
+		Overlay overlay = new Overlay();
+
+		overlayModified = drawHistogramLine( image, overlay);
+
+		if (overlayModified) {
+			overlay.setStrokeColor(java.awt.Color.WHITE);
+			imp.setOverlay(overlay);
+		}
 		addImageToList(imp, name);
 		// reset the imp from the log scaling we applied earlier
 		imp.getProcessor().reset();
+		imp.updateAndDraw();
 	}
 
 	protected void addImageToList(ImagePlus imp, String name) {
@@ -233,6 +324,7 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 			document.add(titlePara);
 
 			// iterate over all produced images
+			//SingleWindowDisplay<? extends RealType<?>> swd = new SingleWindowDisplay<? extends RealType<?>>(container,writer);
 			for (com.itextpdf.text.Image img : listOfPDFImages) {
 				addImage(img);
 			}

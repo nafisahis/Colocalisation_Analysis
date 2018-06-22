@@ -105,11 +105,9 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 	protected boolean isHistogram(RandomAccessibleInterval<? extends RealType<?>> img) {
 		return mapOf2DHistograms.containsKey(img);
 	}
-	protected void drawLine(Overlay overlay, RandomAccessibleInterval<? extends RealType<?>> img, double slope,
+	private void drawLine(Histogram2D<T> histogram, Overlay overlay, long imgWidth, long imgHeight, double slope,
 			double intercept) {
 		double startX, startY, endX, endY;
-		long imgWidth = img.dimension(0);
-		long imgHeight = img.dimension(1);
 		/*
 		 * since we want to draw the line over the whole image we can directly
 		 * use screen coordinates for x values.
@@ -118,18 +116,12 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 		endX = imgWidth;
 
 		// check if we can get some exta information for drawing
-		if (isHistogram(img)) {
-			Histogram2D<T> histogram = mapOf2DHistograms.get(img);
-			// get calibrated start y coordinates
-			double calibratedStartY = slope * histogram.getXMin() + intercept;
-			double calibratedEndY = slope * histogram.getXMax() + intercept;
-			// convert calibrated coordinates to screen coordinates
-			startY = calibratedStartY * histogram.getYBinWidth();
-			endY = calibratedEndY * histogram.getYBinWidth();
-		} else {
-			startY = slope * startX + intercept;
-			endY = slope * endX + intercept;
-		}
+		// get calibrated start y coordinates
+		double calibratedStartY = slope * histogram.getXMin() + intercept;
+		double calibratedEndY = slope * histogram.getXMax() + intercept;
+		// convert calibrated coordinates to screen coordinates
+		startY = calibratedStartY * histogram.getYBinWidth();
+		endY = calibratedEndY * histogram.getYBinWidth();
 
 		/*
 		 * since the screen origin is in the top left of the image, we need to
@@ -153,22 +145,6 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 				if (isHistogram(image)) {
 					
 					Histogram2D<T> histogram = mapOf2DHistograms.get(image); // line is already returned from the image
-					/*
-					 * check if we should draw a regression line for the current
-					 * histogram.
-					 */
-					if (histogram.getDrawingSettings().contains(Histogram2D.DrawingFlags.RegressionLine)) {
-						AutoThresholdRegression<T> autoThreshold = this.container.getAutoThreshold();
-						if (histogram != null && autoThreshold != null) {
-							if (image == histogram.getPlotImage()) {
-								drawLine(overlay, image, autoThreshold.getAutoThresholdSlope(),
-										autoThreshold.getAutoThresholdIntercept());
-								
-								return true;
-								
-							}
-						}
-					}
 				}
 				return false;
 	}
@@ -182,22 +158,29 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 	public void handleHistogram(Histogram2D<T> histogram, String name) {
 		RandomAccessibleInterval<LongType> image = histogram.getPlotImage();
 		ImagePlus imp = ImageJFunctions.wrapFloat( image, name );
-		
+
 		// make a snapshot to be able to reset after modifications
-		imp.getProcessor().snapshot();
+//		imp.getProcessor().snapshot();
 		imp.getProcessor().log();
 		imp.updateAndDraw();
 		imp.getProcessor().resetMinAndMax();
 		IJ.run(imp,"Fire", null);
-		boolean overlayModified = false;
 		Overlay overlay = new Overlay();
 
-		overlayModified = drawHistogramLine( image, overlay);
-
-		if (overlayModified) {
-			overlay.setStrokeColor(java.awt.Color.WHITE);
-			imp.setOverlay(overlay);
+		/*
+		 * check if we should draw a regression line for the current
+		 * histogram.
+		 */
+		if (histogram.getDrawingSettings().contains(Histogram2D.DrawingFlags.RegressionLine)) {
+			AutoThresholdRegression<T> autoThreshold = this.container.getAutoThreshold();
+			if (histogram != null && autoThreshold != null) {
+				drawLine(histogram, overlay, image.dimension(0), image.dimension(1),
+						autoThreshold.getAutoThresholdSlope(), autoThreshold.getAutoThresholdIntercept());
+				overlay.setStrokeColor(java.awt.Color.WHITE);
+				imp.setOverlay(overlay);
+			}
 		}
+
 		addImageToList(imp, name);
 		// reset the imp from the log scaling we applied earlier
 		imp.getProcessor().reset();
@@ -205,7 +188,18 @@ public class PDFWriter<T extends RealType<T>> implements ResultHandler<T> {
 	}
 
 	protected void addImageToList(ImagePlus imp, String name) {
-		java.awt.Image awtImage = imp.getImage();
+		
+		Overlay overlay = imp.getOverlay();
+		IJ.log("overlay="+overlay);
+		
+		if(overlay!=null && overlay.size()>0)
+			IJ.log(""+overlay.get(0));
+		
+		ImagePlus flatten = imp.flatten();
+		flatten.setTitle("FlatteTest");
+		flatten.show();
+		
+		java.awt.Image awtImage = flatten.getImage();
 		try {
 			com.itextpdf.text.Image pdfImage = com.itextpdf.text.Image.getInstance(awtImage, null);
 			pdfImage.setAlt(name); // iText-1.3 setMarkupAttribute("name", name); 

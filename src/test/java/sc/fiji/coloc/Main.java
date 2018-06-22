@@ -54,6 +54,8 @@ public class Main {
 		fluorCellchannels[1].show();
 		// run the plugin, Coloc 2
 		IJ.runPlugIn(Coloc_2.class.getName(),"channel_1=C1-FluorescentCells.tif channel_2=C2-FluorescentCells.tif roi_or_mask=<None> threshold_regression=Costes display_images_in_result li_histogram_channel_1 li_histogram_channel_2 li_icq spearman's_rank_correlation manders'_correlation kendall's_tau_rank_correlation 2d_instensity_histogram costes'_significance_test psf=3 costes_randomisations=10");
+		
+		
 
 //		// open the Confocal Series sample (to test z-stacks)
 //		ImagePlus confocalImage = IJ.openImage("http://imagej.net/images/confocal-series.zip");
